@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="rustdoc">
-    <title>My magnificent slides</title>
+    <title>Rust Radix Tries</title>
 
     
     <link rel="stylesheet" href="http://doc.rust-lang.org/rust.css">
@@ -21,29 +22,126 @@
     <![endif]-->
 
     
-    <h1 class="title">My magnificent slides</h1>
-    <p>Keegan McAllister</p>
+    <h1 class="title">Rust Radix Tries</h1>
+    <p>Michael Sproul</p>
 
-<p>October 16, 2014</p>
+<p><img id="trie" src="images/radix-trie.png"></p>
 
-<h1 id="hello,-world!" class='section-header'><a
-                           href="#hello,-world!">Hello, world!</a></h1>
-<p>It&#39;s so easy!</p>
-<pre class='rust '>
-<span class='kw'>fn</span> <span class='ident'>main</span>() {
-    <span class='macro'>println</span><span class='macro'>!</span>(<span class='string'>&quot;Hello, world!&quot;</span>);
+<h1 id="what-is-rust?" class='section-header'><a
+                           href="#what-is-rust?">What is Rust?</a></h1>
+<p>Rust is a low-level programming language like C++, with functional programming influences.</p>
+
+<ul>
+<li>Strong static typing.</li>
+<li>Algebraic data types and pattern matching.</li>
+<li>Type inference.</li>
+<li>Type-classes (traits) and generics.</li>
+</ul>
+
+<h1 id="what-is-rust?-1" class='section-header'><a
+                           href="#what-is-rust?-1">What is Rust?</a></h1><pre id='rust-example-rendered' class='rust '>
+<span class='doccomment'>/// Insert the given key-value pair, returning any previous value associated with the key.</span>
+<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>insert</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>key</span>: <span class='ident'>K</span>, <span class='ident'>value</span>: <span class='ident'>V</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>V</span><span class='op'>&gt;</span> {
+    <span class='kw'>let</span> <span class='ident'>key_fragments</span> <span class='op'>=</span> <span class='ident'>NibbleVec</span>::<span class='ident'>from_byte_vec</span>(<span class='ident'>key</span>.<span class='ident'>encode</span>());
+    <span class='kw'>let</span> <span class='ident'>result</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>root</span>.<span class='ident'>insert</span>(<span class='ident'>key</span>, <span class='ident'>value</span>, <span class='ident'>key_fragments</span>);
+
+    <span class='kw'>if</span> <span class='ident'>result</span>.<span class='ident'>is_none</span>() {
+        <span class='self'>self</span>.<span class='ident'>length</span> <span class='op'>+=</span> <span class='number'>1</span>;
+    }
+
+    <span class='ident'>result</span>
 }
 </pre>
 
-<h1 id="a-true-c++-replacement" class='section-header'><a
-                           href="#a-true-c++-replacement">A true C++ replacement</a></h1>
-<pre><code class="language-text">error: mismatched types: expected `&amp;&#39;a html5ever::tokenizer::Tokenizer&lt;html5ever::tree_builder::TreeBuilder&lt;dom::node::TrustedNodeAddress,dom::servohtmlparser::Sink&gt;&gt;`, found `&amp;core::cell::RefCell&lt;html5ever::tokenizer::Tokenizer&lt;html5ever::tree_builder::TreeBuilder&lt;dom::node::TrustedNodeAddress,dom::servohtmlparser::Sink&gt;&gt;&gt;`
-</code></pre>
+<h1 id="safer-systems-programming" class='section-header'><a
+                           href="#safer-systems-programming">Safer Systems Programming</a></h1>
+<ul>
+<li><strong>Guaranteed</strong> memory safety via ownership and borrowing.
 
-<h1 id="very-good-then" class='section-header'><a
-                           href="#very-good-then">Very good then</a></h1>
-<div style="text-align: center; margin-top: 120px">
-<img src="http://www.rust-lang.org/logos/rust-logo-256x256-blk.png">
+<ul>
+<li>No use after free errors.</li>
+<li>No segfaults.</li>
+<li>No data-races - safe multi-threading!</li>
+<li>No need to release files, sockets, mutexes.</li>
+</ul></li>
+</ul>
+
+<p>Ownership is RAII and <code>std::auto_ptr</code> perfected.</p>
+
+<h1 id="problems-with-ownership..." class='section-header'><a
+                           href="#problems-with-ownership...">Problems with Ownership...</a></h1>
+<p>In a tree-like data-structure, parents own their children...</p>
+
+<ul>
+<li>Children can&#39;t hold pointers to their parents like in C/Java.</li>
+<li>Removing a key from a Radix Trie may require deleting its parents...</li>
+</ul>
+
+<h1 id="the-solution" class='section-header'><a
+                           href="#the-solution">The Solution</a></h1>
+<ul>
+<li>Use recursion liberally.</li>
+<li>Store actions in an abstract way so they can be performed later.</li>
+</ul>
+<pre id='rust-example-rendered' class='rust '>
+<span class='kw'>enum</span> <span class='ident'>DeleteAction</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>V</span><span class='op'>&gt;</span> {
+    <span class='ident'>Replace</span>(<span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>TrieNode</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>V</span><span class='op'>&gt;&gt;</span>),
+    <span class='ident'>Delete</span>,
+    <span class='ident'>DoNothing</span>
+}
+</pre>
+
+<h1 id="the-solution-1" class='section-header'><a
+                           href="#the-solution-1">The Solution</a></h1><pre id='rust-example-rendered' class='rust '>
+<span class='comment'>// Recurse down the Trie working out what to do.</span>
+<span class='kw'>let</span> (<span class='ident'>value</span>, <span class='ident'>delete_action</span>) <span class='op'>=</span> <span class='kw'>match</span> <span class='self'>self</span>.<span class='ident'>children</span>[<span class='ident'>bucket</span>] {
+    <span class='prelude-val'>None</span> <span class='op'>=&gt;</span> (<span class='prelude-val'>None</span>, <span class='ident'>DoNothing</span>),
+    <span class='prelude-val'>Some</span>(<span class='kw'>box</span> <span class='kw-2'>ref</span> <span class='kw-2'>mut</span> <span class='ident'>existing_child</span>) <span class='op'>=&gt;</span> <span class='comment'>// Do stuff...</span>
+};
+
+<span class='comment'>// Apply the computed delete action.</span>
+<span class='kw'>match</span> <span class='ident'>delete_action</span> {
+    <span class='ident'>Replace</span>(<span class='ident'>node</span>) <span class='op'>=&gt;</span> {
+        <span class='self'>self</span>.<span class='ident'>children</span>[<span class='ident'>bucket</span>] <span class='op'>=</span> <span class='prelude-val'>Some</span>(<span class='ident'>node</span>);
+        (<span class='ident'>value</span>, <span class='ident'>DoNothing</span>)
+    }
+    <span class='comment'>// More cases...</span>
+}
+</pre>
+
+<h1 id="benchmarks" class='section-header'><a
+                           href="#benchmarks">Benchmarks</a></h1>
+<p>Rust does well against Go and Haskell.</p>
+
+<table class="benchmark">
+<tr>
+<th># Words</th>
+<th>Rust</th>
+<th>Haskell</th>
+<th>Go</th>
+</tr>
+<tr>
+<td>226</td>
+<td>0.14 ms</td>
+<td class="winner">0.11 ms</td>
+<td>0.29 ms</td>
+</tr>
+<tr>
+<td>103,366</td>
+<td>90 ms</td>
+<td>413 ms</td>
+<td class="winner">60 ms</td>
+</tr>
+</table>
+
+<p><small>Shown: time for all words to be inserted.</small></p>
+
+<h1 id="thank-you!" class='section-header'><a
+                           href="#thank-you!">Thank you!</a></h1>
+<div align="center">
+<img id="rust-logo" src="http://www.rust-lang.org/logos/rust-logo-blk.svg"><br>
+<a href="http://rust-lang.org/">rust-lang.org</a><br>
+<a href="https://github.com/michaelsproul/rust_radix_trie/">github.com/michaelsproul/rust_radix_trie</a>
 </div>
 
     <script type="text/javascript">
